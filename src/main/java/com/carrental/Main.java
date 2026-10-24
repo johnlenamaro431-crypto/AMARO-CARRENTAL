@@ -9,7 +9,7 @@ import java.util.Scanner;
 /** Application entry point: initialize DB -> create shared DAOs/utilities -> hand over to Authentication. */
 public class Main {
     public static void main(String[] args) {
-       1k
+
         UserDao userDao = new UserDao();
         try (Scanner scanner = new Scanner(System.in)) {
             new Authentication(userDao, scanner).start();

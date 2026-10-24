@@ -1,33 +1,31 @@
 package com.carrental.dao;
 
 import com.carrental.model.User;
+import com.carrental.util.PasswordUtil;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.HexFormat;
 import java.util.Optional;
 
-
+/** All SQL for the users table lives here. */
 public class UserDao {
 
-
-    public boolean register(String username, String password, String roles) {
-        return register(username, password, roles, "PENDING");
+    /** Registers a new account with PENDING status. */
+    public boolean register(String name, String username, String password, String role) {
+        return register(name, username, password, role, "PENDING");
     }
 
-    public boolean register(String username, String password, String roles, String status) {
-        String sql = "INSERT INTO users (username, password, roles, status) VALUES (?, ?, ?, ?)";
+    public boolean register(String name, String username, String password, String role, String status) {
+        String sql = "INSERT INTO users (name, username, password_hash, role, status) VALUES (?, ?, ?, ?, ?)";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, username);
-            ps.setString(2, hash(password));
-            ps.setString(3, roles);
-            ps.setString(4, status);
+            ps.setString(1, name);
+            ps.setString(2, username);
+            ps.setString(3, PasswordUtil.hash(password));
+            ps.setString(4, role);
+            ps.setString(5, status);
             return ps.executeUpdate() == 1;
         } catch (SQLException e) {
             System.out.println("Database error: " + e.getMessage());
@@ -49,21 +47,22 @@ public class UserDao {
         }
     }
 
-
+    /** Returns the user if the username/password match (any status; the UI decides what to do). */
     public Optional<User> login(String username, String password) {
-        String sql = "SELECT id, username, password, roles, status FROM users "
-                + "WHERE username = ? AND password = ?";
+        String sql = "SELECT user_id, name, username, password_hash, role, status FROM users "
+                + "WHERE username = ? AND password_hash = ?";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, username);
-            ps.setString(2, hash(password));
+            ps.setString(2, PasswordUtil.hash(password));
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     return Optional.of(new User(
-                            rs.getInt("id"),
+                            rs.getInt("user_id"),
+                            rs.getString("name"),
                             rs.getString("username"),
-                            rs.getString("password"),
-                            rs.getString("roles"),
+                            rs.getString("password_hash"),
+                            rs.getString("role"),
                             rs.getString("status")));
                 }
             }
@@ -71,10 +70,5 @@ public class UserDao {
             System.out.println("Database error: " + e.getMessage());
         }
         return Optional.empty();
-    }
-
-    private static String hash(String password) {
-        return password;
-
     }
 }

@@ -19,7 +19,7 @@ public class DatabaseInitializer {
                     password_hash TEXT NOT NULL,
                     role          TEXT NOT NULL CHECK (role IN ('ADMIN','STAFF','CUSTOMER')),
                     status        TEXT NOT NULL DEFAULT 'PENDING'
-                                  CHECK (status IN ('PENDING','ACTIVE','INACTIVE'))
+                                  CHECK (status IN ('PENDING','APPROVED','INACTIVE'))
                 )
                 """;
 
@@ -75,7 +75,7 @@ public class DatabaseInitializer {
         // Default admin so someone can approve PENDING accounts.
         UserDao dao = new UserDao();
         if (!dao.usernameExists("admin")) {
-            dao.register("System Admin", "admin", "admin123", "ADMIN", "ACTIVE");
+            dao.register("System Admin", "admin", "admin123", "ADMIN", "APPROVED");
         }
     }
 }

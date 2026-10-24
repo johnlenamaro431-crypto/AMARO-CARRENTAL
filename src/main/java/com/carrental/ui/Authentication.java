@@ -105,7 +105,7 @@ public class Authentication {
         }
 
         User user = result.get();
-        if (!"ACTIVE".equals(user.status())) {
+        if (!"APPROVED".equals(user.status())) {
             System.out.println("Your account is " + user.status() + ". Please wait for admin approval.");
             return;
         }

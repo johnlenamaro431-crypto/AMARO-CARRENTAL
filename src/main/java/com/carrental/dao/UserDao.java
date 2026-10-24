@@ -7,6 +7,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /** All SQL for the users table lives here. */
@@ -70,5 +72,63 @@ public class UserDao {
             System.out.println("Database error: " + e.getMessage());
         }
         return Optional.empty();
+    }
+
+    /** Returns every registered account, regardless of role or status. */
+    public List<User> getAllUsers() {
+        String sql = "SELECT user_id, name, username, password_hash, role, status FROM users ORDER BY user_id";
+        List<User> users = new ArrayList<>();
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                users.add(mapUser(rs));
+            }
+        } catch (SQLException e) {
+            System.out.println("Database error: " + e.getMessage());
+        }
+        return users;
+    }
+
+    /** Returns all accounts (any role) still waiting for approval. */
+    public List<User> getPendingUsers() {
+        String sql = "SELECT user_id, name, username, password_hash, role, status FROM users "
+                + "WHERE status = ? ORDER BY user_id";
+        List<User> users = new ArrayList<>();
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, "PENDING");
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    users.add(mapUser(rs));
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Database error: " + e.getMessage());
+        }
+        return users;
+    }
+
+    /** Changes a PENDING account to APPROVED. Returns true if a row was updated. */
+    public boolean approveUser(int userId) {
+        String sql = "UPDATE users SET status = 'APPROVED' WHERE user_id = ? AND status = 'PENDING'";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, userId);
+            return ps.executeUpdate() == 1;
+        } catch (SQLException e) {
+            System.out.println("Database error: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private User mapUser(ResultSet rs) throws SQLException {
+        return new User(
+                rs.getInt("user_id"),
+                rs.getString("name"),
+                rs.getString("username"),
+                rs.getString("password_hash"),
+                rs.getString("role"),
+                rs.getString("status"));
     }
 }

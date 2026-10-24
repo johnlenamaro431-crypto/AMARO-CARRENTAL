@@ -16,10 +16,13 @@ src/main/java/com/carrental
 ```
 mvn compile exec:java
 ```
-Default admin: `admin` / `admin123` (status ACTIVE).
-New registrations (CUSTOMER, STAFF or ADMIN) are saved as PENDING and cannot log in until approved.
+Default admin: `admin` / `admin123` (status APPROVED).
+New registrations (CUSTOMER, STAFF or ADMIN) are saved as PENDING and cannot log in until an admin approves them (status APPROVED).
 
 ## Database
 `carrental.db` is created automatically on first run (tables: users, cars, rentals, activity_logs).
 SQLite foreign keys are enabled on every connection (`PRAGMA foreign_keys = ON`).
 Passwords are stored as SHA-256 hashes in `users.password_hash`.
+
+## Admin menu
+View all users, view pending registrations, and approve a pending account by User ID (enter 0 to cancel).

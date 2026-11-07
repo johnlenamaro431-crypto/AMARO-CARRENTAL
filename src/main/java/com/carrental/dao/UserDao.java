@@ -122,6 +122,24 @@ public class UserDao {
         }
     }
 
+    /**
+     * Updates the role and status of one account. Inputs are upper-cased before they reach the database.
+     * Returns true if exactly one row was updated.
+     */
+    public boolean updateUserRoleAndStatus(int userId, String newRole, String newStatus) {
+        String sql = "UPDATE users SET role = ?, status = ? WHERE user_id = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, newRole.toUpperCase());
+            ps.setString(2, newStatus.toUpperCase());
+            ps.setInt(3, userId);
+            return ps.executeUpdate() == 1;
+        } catch (SQLException e) {
+            System.out.println("Database error: " + e.getMessage());
+            return false;
+        }
+    }
+
     private User mapUser(ResultSet rs) throws SQLException {
         return new User(
                 rs.getInt("user_id"),

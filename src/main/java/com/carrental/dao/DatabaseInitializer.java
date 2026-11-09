@@ -1,6 +1,7 @@
 package com.carrental.dao;
 
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
@@ -50,14 +51,15 @@ public class DatabaseInitializer {
                 )
                 """;
 
+        // Audit trail (Deliverable 8). Deleting a user also deletes that user's log entries (ON DELETE CASCADE).
         String activityLogs = """
                 CREATE TABLE IF NOT EXISTS activity_logs (
-                    log_id        INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id       INTEGER NOT NULL,
-                    action        TEXT,
-                    description   TEXT,
-                    log_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users(user_id)
+                    log_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id     INTEGER NOT NULL,
+                    action_type TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    timestamp   TIMESTAMP NOT NULL DEFAULT (datetime('now','localtime')),
+                    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
                 )
                 """;
 
@@ -67,6 +69,7 @@ public class DatabaseInitializer {
             st.execute(users);
             st.execute(cars);
             st.execute(rentals);
+            upgradeLegacyActivityLogs(conn);
             st.execute(activityLogs);
         } catch (SQLException e) {
             throw new RuntimeException("Failed to initialize database: " + e.getMessage(), e);
@@ -76,6 +79,29 @@ public class DatabaseInitializer {
         UserDao dao = new UserDao();
         if (!dao.usernameExists("admin")) {
             dao.register("System Admin", "admin", "admin123", "ADMIN", "APPROVED");
+        }
+    }
+
+    /**
+     * Older databases were created with an earlier activity_logs layout (columns "action" / "log_timestamp").
+     * Nothing wrote to that table before Deliverable 8, so it is dropped and re-created with the new layout.
+     */
+    private static void upgradeLegacyActivityLogs(Connection conn) throws SQLException {
+        boolean exists = false;
+        boolean hasActionType = false;
+        try (Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery("PRAGMA table_info(activity_logs)")) {
+            while (rs.next()) {
+                exists = true;
+                if ("action_type".equalsIgnoreCase(rs.getString("name"))) {
+                    hasActionType = true;
+                }
+            }
+        }
+        if (exists && !hasActionType) {
+            try (Statement st = conn.createStatement()) {
+                st.execute("DROP TABLE activity_logs");
+            }
         }
     }
 }

@@ -1,6 +1,9 @@
 package com.carrental;
 
+import com.carrental.dao.ActivityLogDao;
+import com.carrental.dao.CarDao;
 import com.carrental.dao.DatabaseInitializer;
+import com.carrental.dao.RentalDao;
 import com.carrental.dao.UserDao;
 import com.carrental.ui.Authentication;
 
@@ -11,9 +14,12 @@ public class Main {
     public static void main(String[] args) {
         DatabaseInitializer.initialize();
 
-        UserDao userDao = new UserDao();
+        ActivityLogDao activityLogDao = new ActivityLogDao();
+        UserDao userDao = new UserDao(activityLogDao);
+        CarDao carDao = new CarDao(activityLogDao);
+        RentalDao rentalDao = new RentalDao(activityLogDao);
         try (Scanner scanner = new Scanner(System.in)) {
-            new Authentication(userDao, scanner).start();
+            new Authentication(userDao, carDao, rentalDao, activityLogDao, scanner).start();
         }
     }
 }

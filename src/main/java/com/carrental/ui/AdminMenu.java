@@ -1,27 +1,35 @@
 package com.carrental.ui;
 
+import com.carrental.dao.ActivityLogDao;
 import com.carrental.dao.UserDao;
+import com.carrental.model.ActivityLog;
 import com.carrental.model.User;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
 /**
- * Admin menu: view users, approve pending accounts and update a user's role/status.
- * Includes input validation wrappers. No SQL here.
+ * Admin menu: view users, approve pending accounts, update a user's role/status and review the system audit
+ * logs. Includes input validation wrappers. No SQL here.
  */
 public class AdminMenu {
 
     private static final List<String> VALID_ROLES = List.of("CUSTOMER", "STAFF", "ADMIN");
     private static final List<String> VALID_STATUSES = List.of("APPROVED", "PENDING");
 
+    private static final String LOG_ROW = "%-5s | %-8s | %-18s | %-35s | %-20s%n";
+    private static final int LOG_DESCRIPTION_WIDTH = 35;
+
     private final Scanner scanner;
     private final UserDao userDao;
+    private final ActivityLogDao activityLogDao;
     private final User user;
 
-    public AdminMenu(Scanner scanner, UserDao userDao, User user) {
+    public AdminMenu(Scanner scanner, UserDao userDao, ActivityLogDao activityLogDao, User user) {
         this.scanner = scanner;
         this.userDao = userDao;
+        this.activityLogDao = activityLogDao;
         this.user = user;
     }
 
@@ -33,7 +41,8 @@ public class AdminMenu {
             System.out.println("2. View Pending Registrations");
             System.out.println("3. Approve User Account");
             System.out.println("4. Update User Role & Status");
-            System.out.println("5. Logout");
+            System.out.println("5. View System Audit Logs");
+            System.out.println("6. Logout");
 
             switch (readIntInput("Choose: ")) {
                 case 1 -> {
@@ -46,13 +55,107 @@ public class AdminMenu {
                 }
                 case 3 -> approveUser();
                 case 4 -> updateUser();
-                case 5 -> {
+                case 5 -> auditLogMenu();
+                case 6 -> {
                     System.out.println("Logged out. Goodbye, " + user.name() + "!");
                     loggedIn = false;
                 }
-                default -> System.out.println("Invalid choice. Please enter 1-5.");
+                default -> System.out.println("Invalid choice. Please enter 1-6.");
             }
         }
+    }
+
+    // ------------------------------------------------------------------
+    // System audit logs
+    // ------------------------------------------------------------------
+
+    private void auditLogMenu() {
+        boolean back = false;
+        while (!back) {
+            System.out.println("\n--- SYSTEM AUDIT LOGS ---");
+            System.out.println("1. View All System Logs");
+            System.out.println("2. Filter Logs by User ID");
+            System.out.println("3. Clear Audit Logs");
+            System.out.println("4. Back");
+
+            switch (readIntInput("Choose: ")) {
+                case 1 -> {
+                    System.out.println("\n=== ALL SYSTEM LOGS (newest first) ===");
+                    printLogTable(activityLogDao.getAllLogs());
+                }
+                case 2 -> filterLogsByUser();
+                case 3 -> clearLogs();
+                case 4 -> back = true;
+                default -> System.out.println("Invalid choice. Please enter 1-4.");
+            }
+        }
+    }
+
+    private void filterLogsByUser() {
+        int targetId = readIntInput("Enter User ID to filter by (0 to cancel): ");
+        if (targetId == 0) {
+            System.out.println("Filter cancelled.");
+            return;
+        }
+        System.out.println("\n=== LOGS FOR USER ID " + targetId + " (newest first) ===");
+        printLogTable(activityLogDao.getLogsByUserId(targetId));
+    }
+
+    /** Clearing is destructive, so the admin must type CLEAR exactly. The clearing itself is logged. */
+    private void clearLogs() {
+        System.out.println("\nWARNING: This permanently deletes ALL audit log entries.");
+        System.out.print("Type CLEAR to confirm (anything else cancels): ");
+        String confirmation = scanner.nextLine().trim();
+        if (!confirmation.equals("CLEAR")) {
+            System.out.println("Clear cancelled. No logs were deleted.");
+            return;
+        }
+
+        int deleted = activityLogDao.clearAllLogs(user.userId());
+        if (deleted >= 0) {
+            System.out.println("Success! " + deleted + " log entries deleted. This action was recorded.");
+        } else {
+            System.out.println("Clearing failed. No logs were deleted.");
+        }
+    }
+
+    /** Prints the audit logs as an aligned table; long descriptions continue on the next line. */
+    private void printLogTable(List<ActivityLog> logs) {
+        String header = String.format(LOG_ROW, "ID", "User ID", "Action Type", "Description", "Timestamp");
+        String border = "-".repeat(header.length() - System.lineSeparator().length());
+
+        System.out.println(border);
+        System.out.print(header);
+        System.out.println(border);
+        if (logs.isEmpty()) {
+            System.out.println("No log entries found.");
+        } else {
+            for (ActivityLog log : logs) {
+                List<String> descriptionLines = wrap(log.description(), LOG_DESCRIPTION_WIDTH);
+                System.out.printf(LOG_ROW, log.logId(), log.userId(), log.actionType(),
+                        descriptionLines.get(0), log.timestamp());
+                for (int i = 1; i < descriptionLines.size(); i++) {
+                    System.out.printf(LOG_ROW, "", "", "", descriptionLines.get(i), "");
+                }
+            }
+        }
+        System.out.println(border);
+    }
+
+    /** Splits text into lines of at most {@code width} characters, breaking at spaces where possible. */
+    private List<String> wrap(String text, int width) {
+        List<String> lines = new ArrayList<>();
+        String remaining = text == null ? "" : text.trim();
+        while (remaining.length() > width) {
+            int cut = remaining.lastIndexOf(' ', width);
+            if (cut <= 0) {
+                cut = width;
+            }
+            lines.add(remaining.substring(0, cut));
+            remaining = remaining.substring(cut).trim();
+        }
+        lines.add(remaining);
+        return lines;
     }
 
     // ------------------------------------------------------------------
@@ -97,7 +200,7 @@ public class AdminMenu {
             return;
         }
 
-        if (userDao.updateUserRoleAndStatus(target.userId(), newRole, newStatus)) {
+        if (userDao.updateUserRoleAndStatus(user.userId(), target.userId(), newRole, newStatus)) {
             System.out.println("Success! " + target.username() + " is now " + newRole + " | " + newStatus + ".");
         } else {
             System.out.println("Update failed. Please try again.");
@@ -176,7 +279,7 @@ public class AdminMenu {
                 continue;
             }
 
-            if (userDao.approveUser(targetId)) {
+            if (userDao.approveUser(user.userId(), targetId)) {
                 System.out.println("Success! " + target.username() + " (" + target.role()
                         + ") has been APPROVED.");
             } else {

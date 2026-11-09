@@ -14,6 +14,16 @@ import java.util.Optional;
 /** All SQL for the users table lives here. */
 public class UserDao {
 
+    private final ActivityLogDao activityLogDao;
+
+    public UserDao() {
+        this(new ActivityLogDao());
+    }
+
+    public UserDao(ActivityLogDao activityLogDao) {
+        this.activityLogDao = activityLogDao;
+    }
+
     /** Registers a new account with PENDING status. */
     public boolean register(String name, String username, String password, String role) {
         return register(name, username, password, role, "PENDING");
@@ -109,13 +119,45 @@ public class UserDao {
         return users;
     }
 
-    /** Changes a PENDING account to APPROVED. Returns true if a row was updated. */
-    public boolean approveUser(int userId) {
-        String sql = "UPDATE users SET status = 'APPROVED' WHERE user_id = ? AND status = 'PENDING'";
+    /** Finds one account by its ID (used to validate IDs typed in menus). */
+    public Optional<User> findById(int userId) {
+        String sql = "SELECT user_id, name, username, password_hash, role, status FROM users WHERE user_id = ?";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, userId);
-            return ps.executeUpdate() == 1;
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return Optional.of(mapUser(rs));
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Database error: " + e.getMessage());
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Changes a PENDING account to APPROVED and logs USER_APPROVED (in the same transaction).
+     * Returns true if a row was updated.
+     */
+    public boolean approveUser(int adminId, int userId) {
+        String sql = "UPDATE users SET status = 'APPROVED' WHERE user_id = ? AND status = 'PENDING'";
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setInt(1, userId);
+                if (ps.executeUpdate() != 1) {
+                    conn.rollback();
+                    return false;
+                }
+                activityLogDao.logAction(conn, adminId, "USER_APPROVED",
+                        "Admin " + adminId + " approved account for User ID " + userId);
+                conn.commit();
+                return true;
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            }
         } catch (SQLException e) {
             System.out.println("Database error: " + e.getMessage());
             return false;
@@ -123,17 +165,32 @@ public class UserDao {
     }
 
     /**
-     * Updates the role and status of one account. Inputs are upper-cased before they reach the database.
-     * Returns true if exactly one row was updated.
+     * Updates the role and status of one account and logs USER_UPDATED (in the same transaction).
+     * Inputs are upper-cased before they reach the database. Returns true if exactly one row was updated.
      */
-    public boolean updateUserRoleAndStatus(int userId, String newRole, String newStatus) {
+    public boolean updateUserRoleAndStatus(int adminId, int userId, String newRole, String newStatus) {
+        String role = newRole.toUpperCase();
+        String status = newStatus.toUpperCase();
         String sql = "UPDATE users SET role = ?, status = ? WHERE user_id = ?";
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, newRole.toUpperCase());
-            ps.setString(2, newStatus.toUpperCase());
-            ps.setInt(3, userId);
-            return ps.executeUpdate() == 1;
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setString(1, role);
+                ps.setString(2, status);
+                ps.setInt(3, userId);
+                if (ps.executeUpdate() != 1) {
+                    conn.rollback();
+                    return false;
+                }
+                activityLogDao.logAction(conn, adminId, "USER_UPDATED",
+                        "Admin " + adminId + " changed role of User " + userId + " to " + role
+                                + ", status to " + status);
+                conn.commit();
+                return true;
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            }
         } catch (SQLException e) {
             System.out.println("Database error: " + e.getMessage());
             return false;

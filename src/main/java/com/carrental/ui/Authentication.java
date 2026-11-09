@@ -1,5 +1,8 @@
 package com.carrental.ui;
 
+import com.carrental.dao.ActivityLogDao;
+import com.carrental.dao.CarDao;
+import com.carrental.dao.RentalDao;
 import com.carrental.dao.UserDao;
 import com.carrental.model.User;
 
@@ -10,10 +13,17 @@ import java.util.Scanner;
 public class Authentication {
 
     private final UserDao userDao;
+    private final CarDao carDao;
+    private final RentalDao rentalDao;
+    private final ActivityLogDao activityLogDao;
     private final Scanner scanner;
 
-    public Authentication(UserDao userDao, Scanner scanner) {
+    public Authentication(UserDao userDao, CarDao carDao, RentalDao rentalDao,
+                          ActivityLogDao activityLogDao, Scanner scanner) {
         this.userDao = userDao;
+        this.carDao = carDao;
+        this.rentalDao = rentalDao;
+        this.activityLogDao = activityLogDao;
         this.scanner = scanner;
     }
 
@@ -113,11 +123,22 @@ public class Authentication {
         System.out.println("\nLogin successful! Welcome, " + user.name()
                 + " [" + user.role() + " | " + user.status() + "]");
 
+        activityLogDao.logAction(user.userId(), "USER_LOGIN",
+                "User " + user.username() + " (ID: " + user.userId() + ") logged in.");
+
         switch (user.role()) {
-            case "ADMIN" -> new AdminMenu(scanner, userDao, user).show();
-            case "STAFF" -> new StaffMenu(scanner, userDao, user).show();
+            case "ADMIN" -> new AdminMenu(scanner, userDao, activityLogDao, user).show();
+            case "STAFF" -> new StaffMenu(scanner, userDao, carDao, rentalDao, user).show();
             case "CUSTOMER" -> new CustomerMenu(scanner, userDao, user).show();
             default -> System.out.println("Unknown role: " + user.role());
         }
+
+        // Each menu's show() only returns when the user chooses Logout.
+        logout(user);
+    }
+
+    private void logout(User user) {
+        activityLogDao.logAction(user.userId(), "USER_LOGOUT",
+                "User " + user.username() + " (ID: " + user.userId() + ") logged out.");
     }
 }
